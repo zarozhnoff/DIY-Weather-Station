@@ -31,9 +31,7 @@ RF24Module::RF24Module(uint8_t ce_pin, uint8_t csn_pin)
         return false;
       }
 
-      rf24.read(data, size);
-
-      return true;
+      return rf24.read(data, size);
     }
 
 
