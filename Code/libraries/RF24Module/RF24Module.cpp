@@ -3,46 +3,82 @@
 #include <RF24.h>
 #include <RF24Module.h>
 
-RF24Module::RF24Module(uint8_t ce_pin, uint8_t csn_pin)
-    {
-      rf24 = RF24(ce_pin, csn_pin);
-    }
+RF24Module::RF24Module(RF24* radio)
+{
+	rf24 = radio;
+}
 
-    void RF24Module::setup()
-    {
-      rf24.begin();
-      delay(100);
-      rf24.setChannel(76);
-      rf24.setDataRate(RF24_1MBPS);
-      rf24.setPALevel(RF24_PA_HIGH);
-    }
+void RF24Module::setup()
+{
+	rf24->begin();
+	delay(100);
+	rf24->setChannel(76);
+	rf24->setDataRate(RF24_1MBPS);
+	rf24->setPALevel(RF24_PA_HIGH);
+}
 
-    void RF24Module::send(void* data, uint8_t size)
-    {
-      rf24.startListening();
-      rf24.stopListening();
-      rf24.write(data, size);
-    }
+RadioResponse RF24Module::send(RadioRequest request, uint16_t timeout = defaut_timeout)
+{
+	adjustToSending();
 
-    bool RF24Module::read(void* data, uint8_t size)
-    {
-      if(!rf24.available())
-      {
-        return false;
-      }
+	rf24->startListening();
+	rf24->stopListening();
 
-      return rf24.read(data, size);
-    }
+	rf24->write(&request, sizeof(request));
+	adjustToReading();
+
+	int startWaitingResponseTime = millis();
+	bool isResponseReceived = false;
+	while (millis() - startWaitingResponseTime >= timeout)
+	{
+		if (rf24->available())
+		{
+			RadioResponse response;
+			rf24->read(&response, sizeof(response));
+
+			return response;
+		}
+	}
+
+	return RadioResponse::CreateUnsuccesfull(Timeout);
+}
+
+bool RF24Module::read(void* data, uint8_t size)
+{
+	if (!rf24->available())
+	{
+		return false;
+	}
+
+	return rf24->read(data, size);
+}
 
 
-    void RF24Module::startListening()
-    {
-      rf24.openReadingPipe(1, pipe);
-      rf24.startListening();
-    }
+void RF24Module::adjustToReading()
+{
+	if (!isReadingPipeOpened)
+	{
+		rf24->openReadingPipe(1, pipe);
+		isReadingPipeOpened = true;
+	}
 
-    void RF24Module::startWriting()
-    {
-      rf24.stopListening();
-      rf24.openWritingPipe(pipe);
-    }
+	if (!isListening)
+	{
+		rf24->startListening();
+		isListening = true;
+	}
+}
+
+void RF24Module::adjustToSending()
+{
+	if (isListening)
+	{
+		rf24->stopListening();
+		isListening = false;
+	}
+	if (isReadingPipeOpened)
+	{
+		rf24->openWritingPipe(pipe);
+		isReadingPipeOpened = false;
+	}
+}
